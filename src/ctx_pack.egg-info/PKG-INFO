@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: ctx-pack
 Version: 0.1.0
-Summary: Herramienta CLI para consolidar, minificar y empaquetar código fuente para IA.
+Summary: CLI tool to consolidate, minify, and package source code for AI context.
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown

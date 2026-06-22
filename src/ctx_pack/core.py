@@ -3,12 +3,14 @@ import os
 import re
 from .constants import EXCLUDED_DIRS_AND_FILES
 
+
 def estimate_tokens(text: str) -> int:
-    """Estima la cantidad de tokens. Aproximadamente 1 token = 4 caracteres."""
+    """Estimate the number of tokens. Roughly 1 token = 4 characters."""
     return len(text) // 4
 
+
 def minify_content(ext: str, content: str) -> str:
-    """Minifica el contenido según la extensión del archivo."""
+    """Minify content based on the file extension."""
     if ext == ".json":
         try:
             obj = json.loads(content)
@@ -30,17 +32,18 @@ def minify_content(ext: str, content: str) -> str:
         minified_lines.append(line)
     return "\n".join(minified_lines)
 
+
 def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_bytes: int) -> dict:
     current_part = 1
     current_size = 0
     current_file_tokens = 0
     out_file = None
-    
+
     stats = {
         "files_processed": 0,
-        "total_loc": 0,  # Líneas de código empaquetadas
-        "project_tokens": 0, # Tokens solo del código fuente
-        "output_files": [] # Lista de ficheros generados con sus métricas
+        "total_loc": 0,
+        "project_tokens": 0,
+        "output_files": []
     }
 
     def get_output_path(part):
@@ -48,7 +51,6 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
 
     def open_new_file():
         nonlocal out_file, current_size, current_part, current_file_tokens
-        # Si ya había un archivo abierto, lo cerramos y guardamos sus estadísticas
         if out_file:
             out_file.close()
             stats["output_files"].append({
@@ -57,12 +59,12 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
                 "size_kb": round(current_size / 1024, 2)
             })
             current_part += 1
-        
+
         path = get_output_path(current_part)
         out_file = open(path, "w", encoding="utf-8")
         current_size = 0
         current_file_tokens = 0
-        print(f"📄 Creando archivo: {path}")
+        print(f"📄 Creating file: {path}")
 
     def should_exclude(full_path: str):
         return any(
@@ -83,11 +85,10 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
             if not minified:
                 return
 
-            # --- Estadísticas del proyecto ---
             stats["files_processed"] += 1
             loc = len(minified.splitlines())
             stats["total_loc"] += loc
-            
+
             proj_tokens = estimate_tokens(minified)
             stats["project_tokens"] += proj_tokens
 
@@ -95,18 +96,16 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
             block = header + minified
             block_size = len(block.encode("utf-8"))
 
-            # Si el bloque excede el tamaño, abrimos un nuevo archivo
             if current_size + block_size > max_size_bytes and current_size > 0:
                 open_new_file()
 
             out_file.write(block)
             current_size += block_size
-            
-            # Tokens de este bloque (incluye el header) para el archivo de salida
+
             current_file_tokens += estimate_tokens(block)
 
         except Exception:
-            pass # Ignorar archivos no-texto
+            pass
 
     def scan_dir(directory: str):
         try:
@@ -121,11 +120,10 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
         except OSError:
             pass
 
-    print(f"🔍 Escaneando directorio: {root_dir}")
+    print(f"🔍 Scanning directory: {root_dir}")
     open_new_file()
     scan_dir(root_dir)
-    
-    # Cerrar y guardar estadísticas del último archivo abierto
+
     if out_file:
         out_file.close()
         stats["output_files"].append({
@@ -133,5 +131,5 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
             "tokens": current_file_tokens,
             "size_kb": round(current_size / 1024, 2)
         })
-        
+
     return stats

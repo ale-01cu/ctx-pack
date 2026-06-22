@@ -3,8 +3,6 @@ import os
 from .constants import LANGUAGE_PRESETS, EXCLUDED_DIRS_AND_FILES
 from .core import consolidate
 
-# ... (Mantener LANGUAGE_SIGNATURES, EXT_TO_LANG, auto_detect_languages y merge_extensions exactamente igual que en la respuesta anterior) ...
-
 LANGUAGE_SIGNATURES = {
     "tsconfig.json": "ts",
     "package.json": "web",
@@ -42,6 +40,7 @@ EXT_TO_LANG = {
     ".h": "cpp", ".hpp": "cpp",
 }
 
+
 def auto_detect_languages(root_dir: str) -> set:
     detected_by_signature = set()
     detected_by_extension = set()
@@ -54,7 +53,7 @@ def auto_detect_languages(root_dir: str) -> set:
         ]
         depth = current_root[len(root_dir):].count(os.sep)
         if depth >= max_depth:
-            dirs[:] = [] 
+            dirs[:] = []
 
         for filename in files:
             if filename in LANGUAGE_SIGNATURES:
@@ -72,6 +71,7 @@ def auto_detect_languages(root_dir: str) -> set:
         return detected_by_extension
     return set()
 
+
 def merge_extensions(langs: set) -> tuple:
     merged = []
     seen = set()
@@ -82,27 +82,28 @@ def merge_extensions(langs: set) -> tuple:
                 merged.append(ext)
     return tuple(merged)
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="ctx-pack: Empaqueta tu código fuente para dárselo de contexto a una IA."
+        description="ctx-pack: Package your source code to provide context to an AI."
     )
     parser.add_argument(
         "-l", "--lang",
         choices=list(LANGUAGE_PRESETS.keys()) + ["auto"],
         default="auto",
-        help="Preajuste de lenguaje (ej: ts, py, all). Por defecto: auto (detecta automáticamente)"
+        help="Language preset (for example: ts, py, all). Default: auto (automatic detection)"
     )
     parser.add_argument(
         "-e", "--ext", type=str,
-        help="Extensiones personalizadas separadas por coma (ej: .php,.html)"
+        help="Custom extensions separated by comma (for example: .php,.html)"
     )
     parser.add_argument(
         "-s", "--size", type=int, default=500,
-        help="Tamaño máximo por archivo en KB (por defecto: 500)"
+        help="Maximum size per file in KB (default: 500)"
     )
     parser.add_argument(
         "-o", "--output", type=str, default="ctx_pack_output",
-        help="Nombre base del archivo de salida"
+        help="Base name for the output file"
     )
     args = parser.parse_args()
 
@@ -112,25 +113,25 @@ def main():
 
     if args.ext:
         allowed_extensions = tuple(ext.strip() for ext in args.ext.split(","))
-        detected_lang_msg = f"Personalizadas ({args.ext})"
+        detected_lang_msg = f"Custom ({args.ext})"
     else:
         if args.lang == "auto":
             detected_langs = auto_detect_languages(root_dir)
             if detected_langs:
                 allowed_extensions = merge_extensions(detected_langs)
                 langs_str = ", ".join(sorted(detected_langs))
-                detected_lang_msg = f"Auto-detectado: [{langs_str}]"
+                detected_lang_msg = f"Auto-detected: [{langs_str}]"
             else:
                 allowed_extensions = tuple(LANGUAGE_PRESETS["all"])
-                detected_lang_msg = "Auto-detectado: 'all' (sin firmas encontradas)"
+                detected_lang_msg = "Auto-detected: 'all' (no signatures found)"
         else:
             allowed_extensions = tuple(LANGUAGE_PRESETS[args.lang])
             detected_lang_msg = f"Manual: '{args.lang}'"
 
-    print("🚀 Iniciando ctx-pack...")
-    print(f"🤖 Modo de lenguaje: {detected_lang_msg}")
-    print(f"⚙️  Extensiones: {allowed_extensions}")
-    print(f"📦 Tamaño máx/archivo: {args.size} KB")
+    print("🚀 Starting ctx-pack...")
+    print(f"🤖 Language mode: {detected_lang_msg}")
+    print(f"⚙️  Extensions: {allowed_extensions}")
+    print(f"📦 Max size/file: {args.size} KB")
 
     try:
         stats = consolidate(
@@ -139,25 +140,26 @@ def main():
             allowed_exts=allowed_extensions,
             max_size_bytes=max_size_bytes
         )
-        
+
         print("-" * 30)
-        print("📊 Estadísticas del Proyecto Original:")
-        print(f"   📁 Ficheros procesados : {stats['files_processed']}")
-        print(f"   📝 Líneas de código    : {stats['total_loc']:,}")
-        print(f"   🧠 Tokens código fuente: {stats['project_tokens']:,} (aprox)")
+        print("📊 Original Project Statistics:")
+        print(f"   📁 Files processed : {stats['files_processed']}")
+        print(f"   📝 Source lines    : {stats['total_loc']:,}")
+        print(f"   🧠 Source tokens: {stats['project_tokens']:,} (approx)")
         print("-" * 30)
-        print("📦 Estadísticas de Salida:")
-        
+        print("📦 Output Statistics:")
+
         total_output_tokens = 0
         for f_info in stats['output_files']:
             print(f"   📄 {f_info['filename']:<25} | {f_info['tokens']:>6,} tokens | {f_info['size_kb']:>6} KB")
             total_output_tokens += f_info['tokens']
-            
+
         print("-" * 30)
-        print(f"   🔢 Total tokens salida : {total_output_tokens:,} (aprox)")
-        print("✅ ¡Contexto empaquetado con éxito!")
+        print(f"   🔢 Total output tokens : {total_output_tokens:,} (approx)")
+        print("✅ Context packed successfully!")
     except Exception as e:
-        print(f"❌ Ocurrió un error: {e}")
+        print(f"❌ An error occurred: {e}")
+
 
 if __name__ == "__main__":
     main()

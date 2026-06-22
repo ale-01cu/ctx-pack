@@ -5,7 +5,7 @@ import os
 from .constants import LANGUAGE_PRESETS
 from .core import consolidate
 def auto_detect_language(root_dir: str) -> str:
-"""Detecta el lenguaje principal del proyecto basándose en archivos clave."""
+"""Detect the main project language based on key files."""
 signatures = {
 "tsconfig.json": "ts",
 "package.json": "web",
@@ -29,14 +29,14 @@ pass
 return "all"
 def main():
 parser = argparse.ArgumentParser(
-description="ctx-pack: Empaqueta tu código fuente para dárselo de contexto a una IA."
+description="ctx-pack: Package your source code to provide context to an AI."
 )
 parser.add_argument("-l", "--lang", choices=LANGUAGE_PRESETS.keys(), default="auto",
-help="Preajuste de lenguaje (ej: ts, py). Por defecto: auto (detecta automáticamente)")
+help="Language preset (for example: ts, py). Default: auto (automatic detection)")
 parser.add_argument("-e", "--ext", type=str,
-help="Extensiones personalizadas separadas por coma (ej: .php,.html)")
+help="Custom extensions separated by comma (for example: .php,.html)")
 parser.add_argument("-s", "--size", type=int, default=500,
-help="Tamaño máximo por archivo en KB (por defecto: 500)")
+help="Maximum size per file in KB (default: 500)")
 parser.add_argument("-o", "--output", type=str, default="ctx_pack_output",
 help="Nombre base del archivo de salida")
 args = parser.parse_args()
@@ -45,19 +45,19 @@ max_size_bytes = args.size * 1024
 detected_lang_msg = ""
 if args.ext:
 allowed_extensions = tuple(ext.strip() for ext in args.ext.split(","))
-detected_lang_msg = f"Personalizadas ({args.ext})"
+detected_lang_msg = f"Custom ({args.ext})"
 else:
 selected_lang = args.lang
 if selected_lang == "auto":
 selected_lang = auto_detect_language(root_dir)
-detected_lang_msg = f"Auto-detectado: '{selected_lang}'"
+detected_lang_msg = f"Auto-detected: '{selected_lang}'"
 else:
 detected_lang_msg = f"Manual: '{selected_lang}'"
 allowed_extensions = tuple(LANGUAGE_PRESETS[selected_lang])
 print("🚀 Iniciando ctx-pack...")
 print(f"🤖 Modo de lenguaje: {detected_lang_msg}")
 print(f"⚙️  Extensiones: {allowed_extensions}")
-print(f"📦 Tamaño máx/archivo: {args.size} KB")
+print(f"📦 Max size/file: {args.size} KB")
 try:
 consolidate(
 root_dir=root_dir,
@@ -66,9 +66,9 @@ allowed_exts=allowed_extensions,
 max_size_bytes=max_size_bytes
 )
 print("-" * 30)
-print("✅ ¡Contexto empaquetado con éxito!")
+print("✅ Context packed successfully!")
 except Exception as e:
-print(f"❌ Ocurrió un error: {e}")
+print(f"❌ An error occurred: {e}")
 if __name__ == "__main__":
 main()
 // FILE: src\ctx_pack\constants.py
@@ -98,7 +98,7 @@ import os
 import re
 from .constants import EXCLUDED_DIRS_AND_FILES
 def minify_content(ext: str, content: str) -> str:
-"""Minifica el contenido según la extensión del archivo."""
+"""Minify the content based on the file extension."""
 if ext == ".json":
 try:
 obj = json.loads(content)
@@ -169,7 +169,7 @@ elif entry.is_file() and entry.name.endswith(allowed_exts):
 process_file(entry.path)
 except OSError:
 pass
-print(f"🔍 Escaneando directorio: {root_dir}")
+print(f"🔍 Scanning directory: {root_dir}")
 open_new_file()
 scan_dir(root_dir)
 if out_file:

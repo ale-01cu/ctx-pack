@@ -1,7 +1,7 @@
 [project]
 name = "ctx-pack"
 version = "0.1.0"
-description = "Herramienta CLI para consolidar, minificar y empaquetar código fuente para IA."
+description = "CLI tool to consolidate, minify, and package source code for AI context."
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = []
