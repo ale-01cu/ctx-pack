@@ -1,0 +1,178 @@
+
+// FILE: src\ctx_pack\cli.py
+import argparse
+import os
+from .constants import LANGUAGE_PRESETS
+from .core import consolidate
+def auto_detect_language(root_dir: str) -> str:
+"""Detecta el lenguaje principal del proyecto basándose en archivos clave."""
+signatures = {
+"tsconfig.json": "ts",
+"package.json": "web",
+"requirements.txt": "py",
+"pyproject.toml": "py",
+"pom.xml": "java",
+"build.gradle": "java",
+"Cargo.toml": "rust",
+"go.mod": "go",
+"composer.json": "php"
+}
+for filename, lang_preset in signatures.items():
+if os.path.exists(os.path.join(root_dir, filename)):
+return lang_preset
+try:
+for f in os.listdir(root_dir):
+if f.endswith(".csproj"):
+return "csharp"
+except OSError:
+pass
+return "all"
+def main():
+parser = argparse.ArgumentParser(
+description="ctx-pack: Empaqueta tu código fuente para dárselo de contexto a una IA."
+)
+parser.add_argument("-l", "--lang", choices=LANGUAGE_PRESETS.keys(), default="auto",
+help="Preajuste de lenguaje (ej: ts, py). Por defecto: auto (detecta automáticamente)")
+parser.add_argument("-e", "--ext", type=str,
+help="Extensiones personalizadas separadas por coma (ej: .php,.html)")
+parser.add_argument("-s", "--size", type=int, default=500,
+help="Tamaño máximo por archivo en KB (por defecto: 500)")
+parser.add_argument("-o", "--output", type=str, default="ctx_pack_output",
+help="Nombre base del archivo de salida")
+args = parser.parse_args()
+root_dir = os.getcwd()
+max_size_bytes = args.size * 1024
+detected_lang_msg = ""
+if args.ext:
+allowed_extensions = tuple(ext.strip() for ext in args.ext.split(","))
+detected_lang_msg = f"Personalizadas ({args.ext})"
+else:
+selected_lang = args.lang
+if selected_lang == "auto":
+selected_lang = auto_detect_language(root_dir)
+detected_lang_msg = f"Auto-detectado: '{selected_lang}'"
+else:
+detected_lang_msg = f"Manual: '{selected_lang}'"
+allowed_extensions = tuple(LANGUAGE_PRESETS[selected_lang])
+print("🚀 Iniciando ctx-pack...")
+print(f"🤖 Modo de lenguaje: {detected_lang_msg}")
+print(f"⚙️  Extensiones: {allowed_extensions}")
+print(f"📦 Tamaño máx/archivo: {args.size} KB")
+try:
+consolidate(
+root_dir=root_dir,
+base_output=args.output,
+allowed_exts=allowed_extensions,
+max_size_bytes=max_size_bytes
+)
+print("-" * 30)
+print("✅ ¡Contexto empaquetado con éxito!")
+except Exception as e:
+print(f"❌ Ocurrió un error: {e}")
+if __name__ == "__main__":
+main()
+// FILE: src\ctx_pack\constants.py
+EXCLUDED_DIRS_AND_FILES = {
+"node_modules", ".git", ".next", "dist", "build", ".cache", "coverage",
+".vscode", ".idea", ".env", ".env.local", ".env.production", ".env.development",
+"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pnpm-workspace.yaml",
+"public", ".dockerignore", ".gitignore", "TODO.md", "__pycache__", ".venv",
+"env", "virtualenv", "site-packages", "bower_components",
+}
+LANGUAGE_PRESETS = {
+"py": [".py"],
+"js": [".js", ".jsx", ".json"],
+"ts": [".ts", ".tsx", ".json"],
+"web": [".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".json"],
+"java": [".java", ".gradle", ".xml"],
+"csharp": [".cs", ".csproj"],
+"cpp": [".cpp", ".hpp", ".c", ".h"],
+"go": [".go"],
+"rust": [".rs"],
+"php": [".php"],
+"all": [".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".cpp", ".c", ".h", ".cs", ".go", ".rs", ".php", ".rb", ".json", ".html", ".css"]
+}
+// FILE: src\ctx_pack\core.py
+import json
+import os
+import re
+from .constants import EXCLUDED_DIRS_AND_FILES
+def minify_content(ext: str, content: str) -> str:
+"""Minifica el contenido según la extensión del archivo."""
+if ext == ".json":
+try:
+obj = json.loads(content)
+return json.dumps(obj, separators=(",", ":"))
+except (json.JSONDecodeError, ValueError):
+return content.strip()
+minified_lines = []
+if ext in [".js", ".jsx", ".ts", ".tsx", ".css", ".java", ".cpp", ".h", ".cs", ".php"]:
+content = re.sub(r"/\*[\s\S]*?\*/", "", content)
+for line in content.splitlines():
+line = line.strip()
+if not line:
+continue
+if ext in [".js", ".jsx", ".ts", ".tsx", ".java", ".cpp", ".h", ".cs", ".go", ".php"] and line.startswith("//"):
+continue
+if ext in [".py", ".rb"] and line.startswith("#"):
+continue
+minified_lines.append(line)
+return "\n".join(minified_lines)
+def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_bytes: int):
+current_part = 1
+current_size = 0
+out_file = None
+def get_output_path(part):
+return f"{base_output}.txt" if part == 1 else f"{base_output}_part{part}.txt"
+def open_new_file():
+nonlocal out_file, current_size, current_part
+if out_file:
+out_file.close()
+path = get_output_path(current_part)
+out_file = open(path, "w", encoding="utf-8")
+current_size = 0
+print(f"📄 Creando archivo: {path}")
+def should_exclude(full_path: str):
+return any(
+part in EXCLUDED_DIRS_AND_FILES or part.startswith(base_output)
+for part in full_path.replace(root_dir, "").split(os.sep) if part
+)
+def process_file(file_path: str):
+nonlocal current_size, current_part
+rel_path = os.path.relpath(file_path, root_dir)
+ext = os.path.splitext(file_path)[1].lower()
+try:
+with open(file_path, encoding="utf-8") as f:
+raw_content = f.read()
+minified = minify_content(ext, raw_content)
+if not minified:
+return
+header = f"\n// FILE: {rel_path}\n"
+block = header + minified
+block_size = len(block.encode("utf-8"))
+if current_size + block_size > max_size_bytes and current_size > 0:
+current_part += 1
+open_new_file()
+out_file.write(block)
+current_size += block_size
+except Exception:
+pass # Ignorar archivos no-texto
+def scan_dir(directory: str):
+try:
+with os.scandir(directory) as entries:
+for entry in entries:
+if should_exclude(entry.path):
+continue
+if entry.is_dir():
+scan_dir(entry.path)
+elif entry.is_file() and entry.name.endswith(allowed_exts):
+process_file(entry.path)
+except OSError:
+pass
+print(f"🔍 Escaneando directorio: {root_dir}")
+open_new_file()
+scan_dir(root_dir)
+if out_file:
+out_file.close()
+// FILE: src\ctx_pack\__init__.py
+__version__ = "0.1.0"
