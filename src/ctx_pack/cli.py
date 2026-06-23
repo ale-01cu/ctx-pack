@@ -1,7 +1,32 @@
 import argparse
+import json
 import os
+import sys
+from pathlib import Path
 from .constants import LANGUAGE_PRESETS, EXCLUDED_DIRS_AND_FILES
-from .core import consolidate
+from .core import consolidate, list_models
+
+CONFIG_FILE = Path.home() / ".ctx-pack-config.json"
+
+
+def load_config():
+    """Load configuration from file."""
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_config(config):
+    """Save configuration to file."""
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f)
+    except Exception:
+        pass
 
 LANGUAGE_SIGNATURES = {
     "tsconfig.json": "ts",
@@ -114,9 +139,43 @@ def main():
         "--flatten", action="store_true",
         help="Joins all code into a single continuous line without line breaks (extreme minification)."
     )
-    
+    parser.add_argument(
+        "-q", "--query", type=str,
+        help="Use an LLM to find and pack only files related to a concept (e.g., 'payment module', 'user authentication')"
+    )
+    parser.add_argument(
+        "--model", type=str, default="gemini-2.5-flash",
+        help="Google Gemini model to use for semantic search (default: gemini-2.5-flash)"
+    )
+    parser.add_argument(
+        "--list-models", action="store_true",
+        help="List available Google Gemini models"
+    )
+    parser.add_argument(
+        "--show-model", action="store_true",
+        help="Show the currently selected model and exit"
+    )
 
     args = parser.parse_args()
+
+    # Load config and apply saved model if not explicitly specified
+    config = load_config()
+    if "--model" not in sys.argv and "model" in config:
+        args.model = config["model"]
+
+    # Show current model if requested
+    if args.show_model:
+        print(f"Current model: {args.model}")
+        return
+    # Handle --list-models flag
+    if args.list_models:
+        list_models()
+        return
+
+    # Save model to config if explicitly specified
+    if "--model" in sys.argv:
+        config["model"] = args.model
+        save_config(config)
 
     root_dir = os.getcwd()
     max_size_bytes = args.size * 1024
@@ -141,6 +200,10 @@ def main():
 
     print("🚀 Starting ctx-pack...")
     print(f"🤖 Language mode: {detected_lang_msg}")
+    
+    if args.query:
+        print(f"🧠 Semantic search: ENABLED (Query: '{args.query}', Model: '{args.model}')")
+        
     print(f"⚙️  Extensions: {allowed_extensions}")
     print(f"📦 Max size/file: {args.size} KB")
     if args.compress:
@@ -155,7 +218,9 @@ def main():
             allowed_exts=allowed_extensions,
             max_size_bytes=max_size_bytes,
             compress=args.compress,
-            flatten=args.flatten # NUEVO PARÁMETRO
+            flatten=args.flatten,
+            query=args.query,
+            model=args.model
         )
 
         print("-" * 30)

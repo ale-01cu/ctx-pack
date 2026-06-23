@@ -4,6 +4,48 @@ import re
 from collections import Counter
 from .constants import EXCLUDED_DIRS_AND_FILES
 
+# NUEVAS IMPORTACIONES PARA EL LLM
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+
+def list_models():
+    """List available Google Gemini models."""
+    if not genai:
+        print("❌ Google Generative AI library is not installed.")
+        print("Please run: pip install google-generativeai")
+        return
+    
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("❌ GEMINI_API_KEY environment variable is not set.")
+        print("Please set it with: export GEMINI_API_KEY='your_key' (Linux/Mac)")
+        print("Or: $env:GEMINI_API_KEY='your_key' (PowerShell)")
+        return
+    
+    try:
+        genai.configure(api_key=api_key)
+        print("🤖 Available Google Gemini Models:")
+        print("-" * 60)
+        
+        # List models directly from Google
+        for m in genai.list_models():
+            # Strip models/ prefix for cleaner display
+            model_name = m.name.replace("models/", "")
+            print(f"  • {model_name}")
+            if hasattr(m, 'description') and m.description:
+                print(f"    Description: {m.description}")
+            if hasattr(m, 'supported_generation_methods'):
+                print(f"    Methods: {', '.join(m.supported_generation_methods)}")
+            print("-" * 60)
+        
+        print("💡 Use with --model flag, e.g.: ctx-pack -q 'auth' --model gemini-1.5-pro")
+        
+    except Exception as e:
+        print(f"❌ Error fetching models: {e}")
+
 def estimate_tokens(text: str) -> int:
     """Estimate the number of tokens. Roughly 1 token = 4 characters."""
     return len(text) // 4
@@ -93,9 +135,84 @@ def compress_with_dictionary(files_data: list) -> tuple:
     return compressed_files_data, dictionary_text, total_chars_saved
 
 
-def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_bytes: int, compress: bool = False, flatten: bool = False) -> dict:
+# =======================================================
+# NUEVA FUNCIÓN: BÚSQUEDA SEMÁNTICA CON LLM
+# =======================================================
+def get_relevant_files_from_llm(root_dir: str, allowed_exts: tuple, query: str, model: str = "gemini-2.5-flash") -> set:
+    if not genai:
+        raise ImportError("Google Generative AI library is not installed. Please run: pip install google-generativeai")
+    
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable is not set.")
+
+    print("🏗️  Building directory tree for the LLM...")
+    
+    # 1. Construir el árbol del proyecto (solo nombres de archivos y rutas)
+    tree_lines = []
+    for current_root, dirs, files in os.walk(root_dir):
+        dirs[:] = [
+            d for d in dirs
+            if d not in EXCLUDED_DIRS_AND_FILES and not d.startswith(".")
+        ]
+        for filename in files:
+            ext = os.path.splitext(filename)[1].lower()
+            # Solo mostramos al LLM los archivos que cumplen con las extensiones permitidas
+            if ext in allowed_exts:
+                rel_path = os.path.relpath(os.path.join(current_root, filename), root_dir)
+                tree_lines.append(rel_path)
+                
+    project_tree = "\n".join(tree_lines)
+    
+    if not project_tree.strip():
+        print("⚠️ No files found to send to the LLM.")
+        return set()
+
+    # 2. Configurar y llamar a la API de Google Gemini
+    genai.configure(api_key=api_key)
+    # Add models/ prefix if not present
+    model_name = model if model.startswith("models/") else f"models/{model}"
+    model_instance = genai.GenerativeModel(model_name) # Usamos el modelo especificado por el usuario
+
+    prompt = f"""You are an expert software architect. 
+Here is the directory structure of a project (relative paths):
+
+{project_tree}
+
+The user wants to find files related to the following concept: "{query}"
+
+Analyze the paths, filenames, and common software architecture patterns to identify which files are strictly relevant to this concept.
+Return your answer STRICTLY as a JSON array of strings containing the relative paths. Do not include any other text, comments, or markdown formatting.
+Example output format: ["src/payment/controller.py", "src/models/payment.py"]
+If no files are relevant, return an empty array: []
+"""
+
+    print("🧠 Asking the LLM to find relevant files... (This may take a few seconds)")
+    response = model_instance.generate_content(prompt)
+    
+    # 3. Parsear la respuesta del LLM
+    try:
+        # Limpiar posibles marcas de código markdown que el LLM añada por costumbre
+        clean_response = response.text.strip().replace("```json", "").replace("```", "").strip()
+        relevant_files = json.loads(clean_response)
+        
+        if not isinstance(relevant_files, list):
+            raise ValueError("LLM did not return a JSON array")
+            
+        # Normalizar las rutas para que coincidan con lo que os.walk devuelve
+        normalized_files = {os.path.normpath(f) for f in relevant_files}
+        
+        print(f"🎯 LLM identified {len(normalized_files)} relevant files.")
+        return normalized_files
+        
+    except Exception as e:
+        print(f"❌ Error parsing LLM response: {e}")
+        print(f"LLM Raw Response: {response.text}")
+        return set()
+
+
+def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_bytes: int, compress: bool = False, flatten: bool = False, query: str = None, model: str = "gemini-2.5-flash") -> dict:
     current_part = 1
-    out_file = None
     files_data = []
 
     stats = {
@@ -104,6 +221,11 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
         "project_tokens": 0,
         "output_files": []
     }
+    
+    # Si hay un query, llamamos al LLM para obtener la lista blanca
+    llm_allowed_files = None
+    if query:
+        llm_allowed_files = get_relevant_files_from_llm(root_dir, allowed_exts, query, model)
 
     def get_output_path(part):
         return f"{base_output}.txt" if part == 1 else f"{base_output}_part{part}.txt"
@@ -146,6 +268,15 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
     def process_file(file_path: str):
         rel_path = os.path.relpath(file_path, root_dir)
         ext = os.path.splitext(file_path)[1].lower()
+        
+        # =======================================================
+        # FILTRO DEL LLM: Si el LLM definió archivos, y este no está, lo saltamos
+        # =======================================================
+        if llm_allowed_files is not None:
+            # Normalizamos la ruta para compararla correctamente
+            if os.path.normpath(rel_path) not in llm_allowed_files:
+                return # Ignoramos este archivo, no es relevante para el query
+        
         try:
             with open(file_path, encoding="utf-8") as f:
                 raw_content = f.read()
