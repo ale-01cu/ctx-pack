@@ -198,18 +198,22 @@ def main():
             allowed_extensions = tuple(LANGUAGE_PRESETS[args.lang])
             detected_lang_msg = f"Manual: '{args.lang}'"
 
-    print("🚀 Starting ctx-pack...")
-    print(f"🤖 Language mode: {detected_lang_msg}")
-    
+    from . import __version__
+
+    print(f"ctx-pack v{__version__}")
+    print("=" * 47)
+    print(" Config")
+    print(f"   Language       : {detected_lang_msg}")
+    print(f"   Extensions     : {allowed_extensions}")
+    print(f"   Max file size  : {args.size} KB")
     if args.query:
-        print(f"🧠 Semantic search: ENABLED (Query: '{args.query}', Model: '{args.model}')")
-        
-    print(f"⚙️  Extensions: {allowed_extensions}")
-    print(f"📦 Max size/file: {args.size} KB")
+        print(f"   LLM query      : {args.query}")
+        print(f"   LLM model      : {args.model}")
     if args.compress:
-        print("🗜️  Compression: ENABLED (Dictionary mode)")
+        print(f"   Compression    : dictionary")
     if args.flatten:
-        print("📏 Flatten mode: ENABLED (No line breaks)")
+        print(f"   Flatten        : on")
+    print("=" * 47)
 
     try:
         stats = consolidate(
@@ -223,24 +227,26 @@ def main():
             model=args.model
         )
 
-        print("-" * 30)
-        print("📊 Original Project Statistics:")
-        print(f"   📁 Files processed : {stats['files_processed']}")
-        print(f"   📝 Source lines    : {stats['total_loc']:,}")
-        print(f"   🧠 Source tokens: {stats['project_tokens']:,} (approx)")
-        print("-" * 30)
-        print("📦 Output Statistics:")
+        print("=" * 47)
+        print(" Source")
+        print(f"   Files          : {stats['files_processed']}")
+        print(f"   Lines          : {stats['total_loc']:,}")
+        print(f"   Tokens (approx): {stats['project_tokens']:,}")
+        print("=" * 47)
+        print(" Output")
 
         total_output_tokens = 0
         for f_info in stats['output_files']:
-            print(f"   📄 {f_info['filename']:<25} | {f_info['tokens']:>6,} tokens | {f_info['size_kb']:>6} KB")
+            tok = f"{f_info['tokens']:,} tok"
+            kb = f"{f_info['size_kb']} KB"
+            print(f"   {f_info['filename']:<30} {tok:>10}  {kb:>8}")
             total_output_tokens += f_info['tokens']
 
-        print("-" * 30)
-        print(f"   🔢 Total output tokens : {total_output_tokens:,} (approx)")
-        print("✅ Context packed successfully!")
+        print("=" * 47)
+        print(f"   Total tokens: {total_output_tokens:,}")
+        print("[OK] Context packed")
     except Exception as e:
-        print(f"❌ An error occurred: {e}")
+        print(f" Error: {e}")
 
 
 if __name__ == "__main__":

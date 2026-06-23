@@ -170,16 +170,21 @@ detected_lang_msg = "Auto-detected: 'all' (no signatures found)"
 else:
 allowed_extensions = tuple(LANGUAGE_PRESETS[args.lang])
 detected_lang_msg = f"Manual: '{args.lang}'"
-print("🚀 Starting ctx-pack...")
-print(f"🤖 Language mode: {detected_lang_msg}")
+from . import __version__
+print(f"ctx-pack v{__version__}")
+print("=" * 47)
+print(" Config")
+print(f"   Language       : {detected_lang_msg}")
+print(f"   Extensions     : {allowed_extensions}")
+print(f"   Max file size  : {args.size} KB")
 if args.query:
-print(f"🧠 Semantic search: ENABLED (Query: '{args.query}', Model: '{args.model}')")
-print(f"⚙️  Extensions: {allowed_extensions}")
-print(f"📦 Max size/file: {args.size} KB")
+print(f"   LLM query      : {args.query}")
+print(f"   LLM model      : {args.model}")
 if args.compress:
-print("🗜️  Compression: ENABLED (Dictionary mode)")
+print(f"   Compression    : dictionary")
 if args.flatten:
-print("📏 Flatten mode: ENABLED (No line breaks)")
+print(f"   Flatten        : on")
+print("=" * 47)
 try:
 stats = consolidate(
 root_dir=root_dir,
@@ -191,308 +196,23 @@ flatten=args.flatten,
 query=args.query,
 model=args.model
 )
-print("-" * 30)
-print("📊 Original Project Statistics:")
-print(f"   📁 Files processed : {stats['files_processed']}")
-print(f"   📝 Source lines    : {stats['total_loc']:,}")
-print(f"   🧠 Source tokens: {stats['project_tokens']:,} (approx)")
-print("-" * 30)
-print("📦 Output Statistics:")
+print("=" * 47)
+print(" Source")
+print(f"   Files          : {stats['files_processed']}")
+print(f"   Lines          : {stats['total_loc']:,}")
+print(f"   Tokens (approx): {stats['project_tokens']:,}")
+print("=" * 47)
+print(" Output")
 total_output_tokens = 0
 for f_info in stats['output_files']:
-print(f"   📄 {f_info['filename']:<25} | {f_info['tokens']:>6,} tokens | {f_info['size_kb']:>6} KB")
+tok = f"{f_info['tokens']:,} tok"
+kb = f"{f_info['size_kb']} KB"
+print(f"   {f_info['filename']:<30} {tok:>10}  {kb:>8}")
 total_output_tokens += f_info['tokens']
-print("-" * 30)
-print(f"   🔢 Total output tokens : {total_output_tokens:,} (approx)")
-print("✅ Context packed successfully!")
+print("=" * 47)
+print(f"   Total tokens: {total_output_tokens:,}")
+print("[OK] Context packed")
 except Exception as e:
-print(f"❌ An error occurred: {e}")
+print(f" Error: {e}")
 if __name__ == "__main__":
 main()
-// FILE: src\ctx_pack\constants.py
-EXCLUDED_DIRS_AND_FILES = {
-".git", ".svn", ".hg", ".gitignore", ".dockerignore",
-".vscode", ".idea", ".vs", ".settings", ".project", ".classpath",
-".DS_Store", "Thumbs.db",
-".env", ".env.local", ".env.development", ".env.test", ".env.production",
-"secrets.json", "credentials.json",
-"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pnpm-workspace.yaml",
-"poetry.lock", "Pipfile.lock", "Cargo.lock", "composer.lock", "go.sum",
-"Gemfile.lock",
-"node_modules", "bower_components", "dist", "build", "out", "coverage",
-".next", ".nuxt", ".output", ".cache", ".parcel-cache", "public", ".serverless",
-"__pycache__", ".venv", "venv", "env", "virtualenv", "site-packages",
-".pytest_cache", ".tox", ".mypy_cache", ".ruff_cache", "build", "dist",
-"eggs", ".eggs",
-"target", ".gradle", "build", "out", "bin",
-"bin", "obj", "TestResults",
-"vendor", "var/cache", "var/log",
-"target", "vendor", "CMakeCache.txt", "CMakeFiles",
-"TODO.md", "CHANGELOG.md", "logs", "tmp", "temp"
-}
-LANGUAGE_PRESETS = {
-"py": [".py"],
-"js": [".js", ".jsx", ".json"],
-"ts": [".ts", ".tsx", ".json"],
-"web": [".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".json", ".vue", ".svelte", ".astro"],
-"java": [".java", ".gradle", ".xml", ".kt"],
-"csharp": [".cs", ".csproj", ".xaml"],
-"cpp": [".cpp", ".hpp", ".c", ".h", ".cc", ".cxx"],
-"go": [".go", ".mod"],
-"rust": [".rs"],
-"php": [".php"],
-"ruby": [".rb"],
-"swift": [".swift"],
-"all": [
-".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".cpp", ".c", ".h",
-".cs", ".go", ".rs", ".php", ".rb", ".json", ".html", ".css",
-".vue", ".svelte", ".astro", ".kt", ".swift", ".md"
-]
-}
-// FILE: src\ctx_pack\core.py
-import json
-import os
-import re
-from collections import Counter
-from .constants import EXCLUDED_DIRS_AND_FILES
-try:
-import google.generativeai as genai
-except ImportError:
-genai = None
-def list_models():
-"""List available Google Gemini models."""
-if not genai:
-print("❌ Google Generative AI library is not installed.")
-print("Please run: pip install google-generativeai")
-return
-api_key = os.environ.get("GEMINI_API_KEY")
-if not api_key:
-print("❌ GEMINI_API_KEY environment variable is not set.")
-print("Please set it with: export GEMINI_API_KEY='your_key' (Linux/Mac)")
-print("Or: $env:GEMINI_API_KEY='your_key' (PowerShell)")
-return
-try:
-genai.configure(api_key=api_key)
-print("🤖 Available Google Gemini Models:")
-print("-" * 60)
-for m in genai.list_models():
-model_name = m.name.replace("models/", "")
-print(f"  • {model_name}")
-if hasattr(m, 'description') and m.description:
-print(f"    Description: {m.description}")
-if hasattr(m, 'supported_generation_methods'):
-print(f"    Methods: {', '.join(m.supported_generation_methods)}")
-print("-" * 60)
-print("💡 Use with --model flag, e.g.: ctx-pack -q 'auth' --model gemini-1.5-pro")
-except Exception as e:
-print(f"❌ Error fetching models: {e}")
-def estimate_tokens(text: str) -> int:
-"""Estimate the number of tokens. Roughly 1 token = 4 characters."""
-return len(text) // 4
-def minify_content(ext: str, content: str) -> str:
-"""Minify content based on the file extension."""
-if ext == ".json":
-try:
-obj = json.loads(content)
-return json.dumps(obj, separators=(",", ":"))
-except (json.JSONDecodeError, ValueError):
-return content.strip()
-minified_lines = []
-if ext in [".js", ".jsx", ".ts", ".tsx", ".css", ".java", ".cpp", ".h", ".cs", ".php"]:
-content = re.sub(r"/\*[\s\S]*?\*/", "", content)
-for line in content.splitlines():
-line = line.strip()
-if not line:
-continue
-if ext in [".js", ".jsx", ".ts", ".tsx", ".java", ".cpp", ".h", ".cs", ".go", ".php"] and line.startswith("//"):
-continue
-if ext in [".py", ".rb"] and line.startswith("#"):
-continue
-minified_lines.append(line)
-return "\n".join(minified_lines)
-def generate_symbol(index: int) -> str:
-chars = "abcdefghijklmnopqrstuvwxyz"
-symbol = ""
-index += 1
-while index > 0:
-index -= 1
-symbol = chars[index % 26] + symbol
-index //= 26
-return f"§{symbol}"
-def compress_with_dictionary(files_data: list) -> tuple:
-line_counts = Counter()
-for rel_path, content in files_data:
-lines = content.splitlines()
-line_counts.update(lines)
-candidates = {}
-symbol_idx = 0
-total_chars_saved = 0
-for line, count in line_counts.most_common():
-if count >= 3 and len(line) > 15:
-symbol = generate_symbol(symbol_idx)
-original_cost = len(line) * count
-new_cost = (len(symbol) + 1) * count + len(symbol) + 1 + len(line) + 1
-saved = original_cost - new_cost
-if saved > 0:
-candidates[line] = symbol
-total_chars_saved += saved
-symbol_idx += 1
-if not candidates:
-return files_data, "", 0
-compressed_files_data = []
-for rel_path, content in files_data:
-lines = content.splitlines()
-compressed_lines = [candidates.get(line, line) for line in lines]
-compressed_files_data.append((rel_path, "\n".join(compressed_lines)))
-dict_lines = ["[DICT]"]
-for original, symbol in candidates.items():
-dict_lines.append(f"{symbol} {original}") # Formato: §a codigo_original
-dictionary_text = "\n".join(dict_lines) + "\n"
-dict_size = len(dictionary_text)
-if dict_size > total_chars_saved:
-return files_data, "", 0 # Cancelar compresión, no es rentable
-return compressed_files_data, dictionary_text, total_chars_saved
-def get_relevant_files_from_llm(root_dir: str, allowed_exts: tuple, query: str, model: str = "gemini-2.5-flash") -> set:
-if not genai:
-raise ImportError("Google Generative AI library is not installed. Please run: pip install google-generativeai")
-api_key = os.environ.get("GEMINI_API_KEY")
-if not api_key:
-raise ValueError("GEMINI_API_KEY environment variable is not set.")
-print("🏗️  Building directory tree for the LLM...")
-tree_lines = []
-for current_root, dirs, files in os.walk(root_dir):
-dirs[:] = [
-d for d in dirs
-if d not in EXCLUDED_DIRS_AND_FILES and not d.startswith(".")
-]
-for filename in files:
-ext = os.path.splitext(filename)[1].lower()
-if ext in allowed_exts:
-rel_path = os.path.relpath(os.path.join(current_root, filename), root_dir)
-tree_lines.append(rel_path)
-project_tree = "\n".join(tree_lines)
-if not project_tree.strip():
-print("⚠️ No files found to send to the LLM.")
-return set()
-genai.configure(api_key=api_key)
-model_name = model if model.startswith("models/") else f"models/{model}"
-model_instance = genai.GenerativeModel(model_name) # Usamos el modelo especificado por el usuario
-prompt = f"""You are an expert software architect.
-Here is the directory structure of a project (relative paths):
-{project_tree}
-The user wants to find files related to the following concept: "{query}"
-Analyze the paths, filenames, and common software architecture patterns to identify which files are strictly relevant to this concept.
-Return your answer STRICTLY as a JSON array of strings containing the relative paths. Do not include any other text, comments, or markdown formatting.
-Example output format: ["src/payment/controller.py", "src/models/payment.py"]
-If no files are relevant, return an empty array: []
-"""
-print("🧠 Asking the LLM to find relevant files... (This may take a few seconds)")
-response = model_instance.generate_content(prompt)
-try:
-clean_response = response.text.strip().replace("```json", "").replace("```", "").strip()
-relevant_files = json.loads(clean_response)
-if not isinstance(relevant_files, list):
-raise ValueError("LLM did not return a JSON array")
-normalized_files = {os.path.normpath(f) for f in relevant_files}
-print(f"🎯 LLM identified {len(normalized_files)} relevant files.")
-return normalized_files
-except Exception as e:
-print(f"❌ Error parsing LLM response: {e}")
-print(f"LLM Raw Response: {response.text}")
-return set()
-def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_bytes: int, compress: bool = False, flatten: bool = False, query: str = None, model: str = "gemini-2.5-flash") -> dict:
-current_part = 1
-files_data = []
-stats = {
-"files_processed": 0,
-"total_loc": 0,
-"project_tokens": 0,
-"output_files": []
-}
-llm_allowed_files = None
-if query:
-llm_allowed_files = get_relevant_files_from_llm(root_dir, allowed_exts, query, model)
-def get_output_path(part):
-return f"{base_output}.txt" if part == 1 else f"{base_output}_part{part}.txt"
-def write_part(content_str: str):
-nonlocal current_part
-path = get_output_path(current_part)
-size_bytes = len(content_str.encode("utf-8"))
-tokens = estimate_tokens(content_str)
-with open(path, "w", encoding="utf-8") as f:
-f.write(content_str)
-stats["output_files"].append({
-"filename": path,
-"tokens": tokens,
-"size_kb": round(size_bytes / 1024, 2)
-})
-print(f"📄 Creating file: {path}")
-def should_exclude(full_path: str):
-return any(
-part in EXCLUDED_DIRS_AND_FILES or part.startswith(base_output)
-for part in full_path.replace(root_dir, "").split(os.sep) if part
-)
-def scan_dir(directory: str):
-try:
-with os.scandir(directory) as entries:
-for entry in entries:
-if should_exclude(entry.path):
-continue
-if entry.is_dir():
-scan_dir(entry.path)
-elif entry.is_file() and entry.name.endswith(allowed_exts):
-process_file(entry.path)
-except OSError:
-pass
-def process_file(file_path: str):
-rel_path = os.path.relpath(file_path, root_dir)
-ext = os.path.splitext(file_path)[1].lower()
-if llm_allowed_files is not None:
-if os.path.normpath(rel_path) not in llm_allowed_files:
-return # Ignoramos este archivo, no es relevante para el query
-try:
-with open(file_path, encoding="utf-8") as f:
-raw_content = f.read()
-minified = minify_content(ext, raw_content)
-if not minified:
-return
-stats["files_processed"] += 1
-loc = len(minified.splitlines())
-stats["total_loc"] += loc
-proj_tokens = estimate_tokens(minified)
-stats["project_tokens"] += proj_tokens
-files_data.append((rel_path, minified))
-except Exception:
-pass
-print(f"🔍 Scanning directory: {root_dir}")
-scan_dir(root_dir)
-dictionary_text = ""
-if compress and files_data:
-print("🗜️  Compressing patterns...")
-files_data, dictionary_text, chars_saved = compress_with_dictionary(files_data)
-if dictionary_text:
-print(f"✅ Dictionary created. Approx {chars_saved} characters saved.")
-else:
-print("⚠️ No repetitive patterns found that justify compression.")
-print(f"📦 Packing output (Flatten={'ON' if flatten else 'OFF'})...")
-current_buffer = ""
-if dictionary_text:
-current_buffer += dictionary_text
-for rel_path, minified in files_data:
-block = f"// FILE: {rel_path}\n{minified}\n"
-current_buffer += block
-if len(current_buffer.encode("utf-8")) > max_size_bytes:
-if flatten:
-current_buffer = current_buffer.replace("\n", " ")
-write_part(current_buffer)
-current_part += 1
-current_buffer = ""
-if dictionary_text:
-current_buffer += dictionary_text
-if current_buffer.strip():
-if flatten:
-current_buffer = current_buffer.replace("\n", " ")
-write_part(current_buffer)
-return stats
-// FILE: src\ctx_pack\__init__.py
-__version__ = "0.1.0"

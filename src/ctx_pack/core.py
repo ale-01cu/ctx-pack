@@ -1,50 +1,47 @@
 import json
 import os
 import re
+import warnings
 from collections import Counter
 from .constants import EXCLUDED_DIRS_AND_FILES
 
-# NUEVAS IMPORTACIONES PARA EL LLM
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        genai = None
 
 
 def list_models():
     """List available Google Gemini models."""
     if not genai:
-        print("❌ Google Generative AI library is not installed.")
-        print("Please run: pip install google-generativeai")
+        print("Google Generative AI library is not installed.")
+        print("Run: pip install google-generativeai")
         return
     
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("❌ GEMINI_API_KEY environment variable is not set.")
-        print("Please set it with: export GEMINI_API_KEY='your_key' (Linux/Mac)")
-        print("Or: $env:GEMINI_API_KEY='your_key' (PowerShell)")
+        print("GEMINI_API_KEY environment variable is not set.")
+        print("Set it with: export GEMINI_API_KEY='your_key'")
         return
     
     try:
         genai.configure(api_key=api_key)
-        print("🤖 Available Google Gemini Models:")
-        print("-" * 60)
+        print("Available Gemini Models")
+        print("=" * 40)
         
-        # List models directly from Google
         for m in genai.list_models():
-            # Strip models/ prefix for cleaner display
             model_name = m.name.replace("models/", "")
-            print(f"  • {model_name}")
+            print(f"  {model_name}")
             if hasattr(m, 'description') and m.description:
-                print(f"    Description: {m.description}")
+                print(f"    {m.description}")
             if hasattr(m, 'supported_generation_methods'):
                 print(f"    Methods: {', '.join(m.supported_generation_methods)}")
-            print("-" * 60)
-        
-        print("💡 Use with --model flag, e.g.: ctx-pack -q 'auth' --model gemini-1.5-pro")
+            print("=" * 40)
         
     except Exception as e:
-        print(f"❌ Error fetching models: {e}")
+        print(f"Error fetching models: {e}")
 
 def estimate_tokens(text: str) -> int:
     """Estimate the number of tokens. Roughly 1 token = 4 characters."""
@@ -146,7 +143,7 @@ def get_relevant_files_from_llm(root_dir: str, allowed_exts: tuple, query: str, 
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable is not set.")
 
-    print("🏗️  Building directory tree for the LLM...")
+    print(f"  LLM query: scanning files...")
     
     # 1. Construir el árbol del proyecto (solo nombres de archivos y rutas)
     tree_lines = []
@@ -165,7 +162,7 @@ def get_relevant_files_from_llm(root_dir: str, allowed_exts: tuple, query: str, 
     project_tree = "\n".join(tree_lines)
     
     if not project_tree.strip():
-        print("⚠️ No files found to send to the LLM.")
+        print("  LLM query: no files to scan")
         return set()
 
     # 2. Configurar y llamar a la API de Google Gemini
@@ -187,7 +184,7 @@ Example output format: ["src/payment/controller.py", "src/models/payment.py"]
 If no files are relevant, return an empty array: []
 """
 
-    print("🧠 Asking the LLM to find relevant files... (This may take a few seconds)")
+    print(f"  LLM query: asking model ({model})...")
     response = model_instance.generate_content(prompt)
     
     # 3. Parsear la respuesta del LLM
@@ -202,12 +199,12 @@ If no files are relevant, return an empty array: []
         # Normalizar las rutas para que coincidan con lo que os.walk devuelve
         normalized_files = {os.path.normpath(f) for f in relevant_files}
         
-        print(f"🎯 LLM identified {len(normalized_files)} relevant files.")
+        print(f"  LLM query: {len(normalized_files)} files match")
         return normalized_files
         
     except Exception as e:
-        print(f"❌ Error parsing LLM response: {e}")
-        print(f"LLM Raw Response: {response.text}")
+        print(f"  LLM query: parse error — {e}")
+        print(f"  LLM raw: {response.text[:200]}")
         return set()
 
 
@@ -244,7 +241,7 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
             "tokens": tokens,
             "size_kb": round(size_bytes / 1024, 2)
         })
-        print(f"📄 Creating file: {path}")
+        print(f"  Created: {path}")
 
     def should_exclude(full_path: str):
         return any(
@@ -294,21 +291,18 @@ def consolidate(root_dir: str, base_output: str, allowed_exts: tuple, max_size_b
         except Exception:
             pass
 
-    print(f"🔍 Scanning directory: {root_dir}")
+    print(f"  Scan: {root_dir}")
     scan_dir(root_dir)
-    
-    # Compresión
+
     dictionary_text = ""
     if compress and files_data:
-        print("🗜️  Compressing patterns...")
         files_data, dictionary_text, chars_saved = compress_with_dictionary(files_data)
         if dictionary_text:
-            print(f"✅ Dictionary created. Approx {chars_saved} characters saved.")
+            print(f"  Compression: dictionary saved ~{chars_saved} chars")
         else:
-            print("⚠️ No repetitive patterns found that justify compression.")
+            print(f"  Compression: skipped (no gains)")
 
-    # Aplanado y partición (Escritura)
-    print(f"📦 Packing output (Flatten={'ON' if flatten else 'OFF'})...")
+    print(f"  Packing: writing output...")
     
     current_buffer = ""
     if dictionary_text:
