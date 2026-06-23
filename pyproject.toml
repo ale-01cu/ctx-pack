@@ -4,6 +4,18 @@ version = "0.1.0"
 description = "CLI tool to consolidate, minify, and package source code for AI context."
 readme = "README.md"
 requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+  { name = "Alejandro Figueroa Rodríguez", email = "alejandro.figueroa.rodriguez.01@email.com" }
+]
+keywords = ["ai", "llm", "context", "codepack", "gemini", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
 dependencies = [
     "google-generativeai>=0.3.0",
 ]
@@ -14,3 +26,7 @@ ctx-pack = "ctx_pack.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
