@@ -105,6 +105,17 @@ def main():
         "-o", "--output", type=str, default="ctx_pack_output",
         help="Base name for the output file"
     )
+    parser.add_argument(
+        "-c", "--compress", action="store_true",
+        help="Enable dictionary compression to reduce token count by replacing repeated lines with symbols."
+    )
+
+    parser.add_argument(
+        "--flatten", action="store_true",
+        help="Joins all code into a single continuous line without line breaks (extreme minification)."
+    )
+    
+
     args = parser.parse_args()
 
     root_dir = os.getcwd()
@@ -132,13 +143,19 @@ def main():
     print(f"🤖 Language mode: {detected_lang_msg}")
     print(f"⚙️  Extensions: {allowed_extensions}")
     print(f"📦 Max size/file: {args.size} KB")
+    if args.compress:
+        print("🗜️  Compression: ENABLED (Dictionary mode)")
+    if args.flatten:
+        print("📏 Flatten mode: ENABLED (No line breaks)")
 
     try:
         stats = consolidate(
             root_dir=root_dir,
             base_output=args.output,
             allowed_exts=allowed_extensions,
-            max_size_bytes=max_size_bytes
+            max_size_bytes=max_size_bytes,
+            compress=args.compress,
+            flatten=args.flatten # NUEVO PARÁMETRO
         )
 
         print("-" * 30)
@@ -163,3 +180,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+    
