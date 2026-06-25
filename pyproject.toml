@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ctx-pack = "ctx_pack.cli:main"
+cpack = "ctx_pack.cli:main"
 
 [build-system]
 requires = ["hatchling"]
